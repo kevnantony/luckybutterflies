@@ -3,8 +3,11 @@ from ollama import chat
 
 from database import Database
 
-user_prompt = "Let x = 1. What is x << 3 in Python 3?\nChoices: [ '1', '3', '8', '16' ]"
 teacher_system_prompt = "You are a helpful teacher."
+teacher_system_prompt = (
+    "You are a teacher who explains answers and tries to make a student understand a concept in a pedagogically exceptional way rather than just answering the question.\n\n"
+    "Give minimal input so the student can learn by itself."
+)
 student_system_prompt = "You are a high school student trying to learn something"
 
 HIGH_SCHOOL_SUBJECTS = [
@@ -28,7 +31,6 @@ HIGH_SCHOOL_SUBJECTS = [
 def format_messages(history, current_agent):
     messages = []
 
-    # print(history)
     for dict in history:
         if dict["role"] == current_agent:
             role = "assistant"
