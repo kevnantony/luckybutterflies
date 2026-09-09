@@ -1,6 +1,6 @@
 import gradio as gr
 from document_parser import extract_text_from_file
-from llm_handler import generate_learning_outcomes_prompt, stream_chat_response
+from llm_handler import generate_learning_outcomes_prompt, stream_chat_response, generate_progress_report
 
 # Developer encoded system prompt
 DEV_SYSTEM_PROMPT = (
@@ -255,6 +255,49 @@ label, .block > label span {
 }
 .left-panel  { animation-delay: 0.1s; }
 .right-panel { animation-delay: 0.2s; }
+
+/* ── Progress Report button ── */
+.report-btn {
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 12px !important;
+    font-weight: 600 !important;
+    font-size: 0.88rem !important;
+    padding: 11px 20px !important;
+    transition: all 0.25s ease !important;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.28) !important;
+    width: 100% !important;
+    margin-top: 14px !important;
+}
+.report-btn:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.45) !important;
+}
+.report-btn:active { transform: translateY(0) !important; }
+
+/* ── Report accordion ── */
+.report-accordion {
+    background: var(--bg-input) !important;
+    border: 1px solid rgba(16, 185, 129, 0.25) !important;
+    border-radius: 12px !important;
+    margin-top: 12px !important;
+}
+.report-accordion > .label-wrap {
+    color: #6ee7b7 !important;
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+    padding: 10px 14px !important;
+}
+.report-out {
+    background: var(--bg-base) !important;
+    border: 1px solid rgba(16, 185, 129, 0.15) !important;
+    border-radius: 10px !important;
+    padding: 16px 20px !important;
+    color: var(--text-primary) !important;
+    font-size: 0.9rem !important;
+    line-height: 1.7 !important;
+}
 """
 
 
@@ -399,6 +442,21 @@ with gr.Blocks() as app:
                     elem_classes="send-btn",
                 )
 
+            report_btn = gr.Button(
+                "📊 Generate Progress Report",
+                elem_classes="report-btn",
+            )
+            with gr.Accordion(
+                "📋 Student Progress Report",
+                open=True,
+                visible=False,
+                elem_classes="report-accordion",
+            ) as report_accordion:
+                report_out = gr.Markdown(
+                    "",
+                    elem_classes="report-out",
+                )
+
     # ── Event handlers ──
     process_btn.click(
         fn=process_handbook,
@@ -430,6 +488,16 @@ with gr.Blocks() as app:
         fn=bot,
         inputs=[chatbot, extracted_system_prompt],
         outputs=[chatbot],
+    )
+
+    def run_report(history, extracted_prompt):
+        report_md = generate_progress_report(history, extracted_prompt)
+        return report_md, gr.update(visible=True)
+
+    report_btn.click(
+        fn=run_report,
+        inputs=[chatbot, extracted_system_prompt],
+        outputs=[report_out, report_accordion],
     )
 
 
