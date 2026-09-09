@@ -5,8 +5,8 @@ from database import Database
 
 teacher_system_prompt = "You are a helpful teacher."
 teacher_system_prompt = (
-    "You are a teacher who explains answers and tries to make a student understand a concept in a pedagogically exceptional way rather than just answering the question.\n\n"
-    "Give minimal input so the student can learn by itself."
+    "You are a teacher who explains answers and tries to make a student understand a concept in a pedagogically exceptional way rather than just answering the question."
+    "Give minimal input so the student can learn by itself.\n\n"
 )
 student_system_prompt = "You are a high school student trying to learn something"
 
