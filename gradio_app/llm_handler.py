@@ -17,6 +17,29 @@ def generate_learning_outcomes_prompt(handbook_text: str) -> str:
     )
     return response.message.content
 
+def stream_learning_outcomes_prompt(handbook_text: str):
+    """Uses Ollama to extract learning outcomes and stream tokens as they arrive."""
+    prompt = (
+        "You are an expert curriculum designer. Extract the key learning outcomes and objectives from the following course handbook text. "
+        "Format your output as a set of instructions for a virtual teacher. For example: 'Your goal is to help the student achieve the following learning outcomes: [List outcomes]'.\n\n"
+        f"Course Handbook Text:\n{handbook_text}"
+    )
+
+    response_stream = ollama.chat(
+        model="llama3.2:3b",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": prompt},
+        ],
+        stream=True,
+    )
+    partial_text = ""
+    for chunk in response_stream:
+        content = chunk.message.content
+        if content:
+            partial_text += content
+            yield partial_text
+
 def stream_chat_response(messages: list, system_prompt: str):
     """Streams the chat response from Ollama, prepending the system prompt.
     
