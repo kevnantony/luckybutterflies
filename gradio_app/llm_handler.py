@@ -1,4 +1,6 @@
 import ollama
+'''
+#this should be moved to teacher_student_conversation.py a function that generates a suitable prompts based on dropped file
 
 def generate_learning_outcomes_prompt(handbook_text: str) -> str:
     """Uses Ollama to extract learning outcomes and generate a system prompt."""
@@ -16,6 +18,7 @@ def generate_learning_outcomes_prompt(handbook_text: str) -> str:
         ],
     )
     return response.message.content
+    '''
 
 def stream_learning_outcomes_prompt(handbook_text: str):
     """Uses Ollama to extract learning outcomes and stream tokens as they arrive."""
