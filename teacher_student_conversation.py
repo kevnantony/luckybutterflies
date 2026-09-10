@@ -1,14 +1,44 @@
+import os
 from datasets import load_dataset
 from ollama import chat
-
+from gradio_app.document_parser import extract_text_from_file
 from database import Database
 
-teacher_system_prompt = "You are a helpful teacher."
 teacher_system_prompt = (
-    "You are a teacher who explains answers and tries to make a student understand a concept in a pedagogically exceptional way rather than just answering the question."
-    "Give minimal input so the student can learn by itself.\n\n"
+    "You are a teacher who helps a student study without directly giving answers but rather "
+    "by giving hints and support in a clear and concise manner, and tries to make a student "
+    "understand a concept in a pedagogically exceptional way rather than just answering the question."
 )
+
 student_system_prompt = "You are a high school student trying to learn something"
+
+additional_knowledge_system_prompt = (
+    "You are an expert curriculum designer. Extract the key learning outcomes and objectives from the following course handbook text. "
+    "Format your output as a set of instructions for a virtual teacher. For example: 'Your goal is to help the student achieve the following learning outcomes: [List outcomes]'.\n\n"
+)
+
+
+def generate_learning_outcomes_prompt(handbook_text: str) -> str:
+    """Uses Ollama to extract learning outcomes and generate a system prompt."""
+    prompt = additional_knowledge_system_prompt + f"Course Handbook Text:\n{handbook_text}"
+    response = chat(
+        model="llama3.2:3b",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": prompt},
+        ],
+    )
+    return response.message.content
+
+
+HANDBOOK_DIR = "handbooks"
+
+
+def build_combined_prompt(file_path: str) -> str:
+    text = extract_text_from_file(file_path)
+    outcomes = generate_learning_outcomes_prompt(text)
+    return teacher_system_prompt + f"\n\nCourse learning outcomes to focus on:\n{outcomes}\n"
+
 
 HIGH_SCHOOL_SUBJECTS = [
     "high_school_biology",
@@ -28,87 +58,74 @@ HIGH_SCHOOL_SUBJECTS = [
 ]
 
 
+def subject_to_handbook(subject: str) -> str:
+    """Map an MMLU subject key to its handbook file path.
+    e.g. 'high_school_computer_science' -> 'handbooks/Computer_Science_Handbook.pdf'
+    """
+    name = subject.replace("high_school_", "")
+    name = "_".join(w.capitalize() for w in name.split("_"))
+    return os.path.join(HANDBOOK_DIR, f"{name}_Handbook.pdf")
+
+
 def format_messages(history, current_agent):
     messages = []
-
-    for dict in history:
-        if dict["role"] == current_agent:
-            role = "assistant"
-        else:
-            role = "user"
-
-        messages.append(
-            {
-                "role": role,
-                "content": dict["content"],
-            }
-        )
-
+    for turn in history:
+        role = "assistant" if turn["role"] == current_agent else "user"
+        messages.append({"role": role, "content": turn["content"]})
     return messages
 
 
 def main():
-
     db = Database()
 
-    dataset = load_dataset("cais/mmlu", "high_school_biology")
-
+    # Load all subject datasets once.
     datasets = {}
-
     for subject in HIGH_SCHOOL_SUBJECTS:
         print(f"Loading {subject}...")
         datasets[subject] = load_dataset("cais/mmlu", subject)
 
-    for index, dataset in enumerate(datasets.values()):
-        print(dataset)
-        print(dataset["test"][0])
+    for index, (subject, dataset) in enumerate(datasets.items()):
+        print(f"\n=== {subject} ===")
 
-        question = f"I dont understand this task. Please help me. \nquestion: {dataset['test'][0]['question']}\nchoices: {dataset['test'][0]['choices']}"
+        # Build the combined teacher prompt (teacher + extracted learning outcomes).
+        handbook_path = subject_to_handbook(subject)
+        if os.path.exists(handbook_path):
+            combined_teacher_prompt = build_combined_prompt(handbook_path)
+        else:
+            print(f"[warn] no handbook for {subject} at {handbook_path}, using base teacher prompt")
+            combined_teacher_prompt = teacher_system_prompt
 
-        conversation_id = db.create_conversation(index, "Original")
-        history = []
-        history.append(
-            {
-                "role": "student",
-                "content": question,
-            }
-        )
-        print(question)
-        for sequence in range(6):
-            if sequence % 2 == 0:
-                system_prompt = teacher_system_prompt
-                agent = "teacher"
-                messages = format_messages(history, "teacher")
-            else:
-                system_prompt = student_system_prompt
-                agent = "student"
-                messages = format_messages(history, "student")
-
-            # print(messages)
-            response = chat(
-                model="llama3.2:3b",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    *messages,
-                ],
+        for n in range(2):
+            q = dataset["test"][n]
+            question = (
+                f"I don't understand this task. Please help me.\n"
+                f"question: {q['question']}\n"
+                f"choices: {q['choices']}"
             )
 
-            content = response.message.content
+            conversation_id = db.create_conversation(index * 2 + n, "teacher with additional KG")
+            history = [{"role": "student", "content": question}]
+            print(question)
 
-            history.append(
-                {
-                    "role": agent,
-                    "content": content,
-                }
-            )
+            for sequence in range(6):
+                if sequence % 2 == 0:
+                    system_prompt = combined_teacher_prompt
+                    agent = "teacher"
+                    messages = format_messages(history, "teacher")
+                else:
+                    system_prompt = student_system_prompt
+                    agent = "student"
+                    messages = format_messages(history, "student")
 
-            db.add_message(
-                conversation_id,
-                sequence + 1,
-                agent,
-                content,
-            )
-            print(response.message.content)
+                response = chat(
+                    model="llama3.2:3b",
+                    messages=[{"role": "system", "content": system_prompt}, *messages],
+                )
+                content = response.message.content
+
+                history.append({"role": agent, "content": content})
+                db.add_message(conversation_id, sequence + 1, agent, content)
+                print(f"[{agent}] {content}\n")
 
     print("Hello from luckybutterflies!")
 
